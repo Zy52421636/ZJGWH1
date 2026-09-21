@@ -11,22 +11,26 @@ st.title("📊 气瓶收发自动化统计系统")
 uploaded_file = st.file_uploader("请上传您的月报表文件 (.xlsx 或 .xlsm)", type=["xlsx", "xlsm"])
 
 def categorize(c_type, p_desc):
-    """核心分类逻辑，与之前的要求完全一致"""
+    """核心分类逻辑，包含空值容错"""
+    # 强制转换为字符串大写并去除两端空格
     c_type = str(c_type).strip().upper()
     p_desc = str(p_desc).strip().upper()
     
     if c_type == "CYLINDER":
         return "Cylinder"
+    
     elif c_type == "TONTANK":
-        if "NH3" in p_desc and "930" in pdesc:
+        if "NH3" in p_desc and "930" in p_desc:
             return "TT 930 L"
         else:
             return "TT 440L"
+            
     elif c_type == "BUNDLE":
-        if "SIH4" in p_desc and "355KG" in pdesc:
+        if "SIH4" in p_desc and "355KG" in p_desc:
             return "Bundle 28 cyl"
         else:
             return "Bundle 16 cyl"
+            
     elif c_type == "NOT AVAILABLE":
         if "16*50" in p_desc:
             return "Bundle 28 cyl"
@@ -37,6 +41,7 @@ def categorize(c_type, p_desc):
                 return "TT 930 L"
             else:
                 return "TT 440L"
+                
     return None
 
 if uploaded_file is not None:
@@ -51,9 +56,17 @@ if uploaded_file is not None:
         df_full['Category'] = df_full.apply(lambda row: categorize(row.get('CYLINDER_TYPE_DESCR', ''), row.get('PROD_DESCR', '')), axis=1)
         df_empty['Category'] = df_empty.apply(lambda row: categorize(row.get('CYLINDER_TYPE_DESCR', ''), row.get('PROD_DESCR', '')), axis=1)
         
-        # 3. 统计数量
+        # 3. 统计数量并转换为字典
         counts_full = df_full['Category'].value_counts().to_dict()
         counts_empty = df_empty['Category'].value_counts().to_dict()
+        
+        # 补齐缺少的分类，防止有的型号是0不显示
+        keys_arr = ["Cylinder", "TT 440L", "TT 930 L", "Bundle 16 cyl", "Bundle 28 cyl"]
+        for k in keys_arr:
+            if k not in counts_full:
+                counts_full[k] = 0
+            if k not in counts_empty:
+                counts_empty[k] = 0
         
         # 在网页前端展示统计结果
         col1, col2 = st.columns(2)
@@ -65,28 +78,28 @@ if uploaded_file is not None:
             st.dataframe(pd.DataFrame(list(counts_empty.items()), columns=['类别', '数量']))
         
         # 4. 将结果写回到原 Excel 文件的“数据统计”Sheet中
-        # keep_vba=True 确保原有的宏代码不会丢失
         wb = load_workbook(uploaded_file, keep_vba=True)
         ws_stat = wb["数据统计"]
         
         def update_stats(ws, section_name, counts_dict):
-            # 寻找大标题行
             start_row = None
+            # 寻找A列的大标题行
             for r in range(1, ws.max_row + 1):
-                cell_val = str(ws.cell(row=r, column=1).value or "")
+                cell_val = str(ws.cell(row=r, column=1).value or "").strip()
                 if section_name in cell_val:
                     start_row = r
                     break
             
             if start_row:
-                cat_col = 2 # B列是类别
-                qty_col = 3 # C列是瓶数
+                cat_col = 2 # B列是型号类别
+                qty_col = 3 # C列是填入瓶数
                 
+                # 从标题下方开始扫描
                 for r in range(start_row + 1, start_row + 15):
                     a_val = str(ws.cell(row=r, column=1).value or "").strip()
                     row_label = str(ws.cell(row=r, column=cat_col).value or "").strip()
                     
-                    # 遇到下一个A列大标题则停止
+                    # 【核心拦截】：如果A列出现了内容（比如"当月总发满瓶数"），立刻停止，不越界填写！
                     if a_val != "":
                         break
                         
@@ -96,6 +109,7 @@ if uploaded_file is not None:
                             ws.cell(row=r, column=qty_col).value = v
                             break
 
+        # 只更新“收”区域
         update_stats(ws_stat, "收满瓶", counts_full)
         update_stats(ws_stat, "收空瓶", counts_empty)
         
