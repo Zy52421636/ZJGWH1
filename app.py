@@ -10,34 +10,34 @@ st.title("📊 气瓶收发自动化统计系统")
 # 上传组件
 uploaded_file = st.file_uploader("请上传您的月报表文件 (.xlsx 或 .xlsm)", type=["xlsx", "xlsm"])
 
-def categorize(c_type, p_desc):
+def categorize(c_type, prod_desc):
     """核心分类逻辑，包含空值容错"""
     # 强制转换为字符串大写并去除两端空格
     c_type = str(c_type).strip().upper()
-    p_desc = str(p_desc).strip().upper()
+    prod_desc = str(prod_desc).strip().upper()
     
     if c_type == "CYLINDER":
         return "Cylinder"
     
     elif c_type == "TONTANK":
-        if "NH3" in p_desc and "930" in p_desc:
+        if "NH3" in prod_desc and "930" in prod_desc:
             return "TT 930 L"
         else:
             return "TT 440L"
             
     elif c_type == "BUNDLE":
-        if "SIH4" in p_desc and "355KG" in p_desc:
+        if "SIH4" in prod_desc and "355KG" in prod_desc:
             return "Bundle 28 cyl"
         else:
             return "Bundle 16 cyl"
             
     elif c_type == "NOT AVAILABLE":
-        if "16*50" in p_desc:
+        if "16*50" in prod_desc:
             return "Bundle 28 cyl"
-        elif "440L以下" in pdesc:
+        elif "440L以下" in prod_desc:
             return "Cylinder"
-        elif "440L以上" in pdesc:
-            if "NH3" in pdesc and "930" in pdesc:
+        elif "440L以上" in prod_desc:
+            if "NH3" in prod_desc and "930" in prod_desc:
                 return "TT 930 L"
             else:
                 return "TT 440L"
@@ -99,7 +99,7 @@ if uploaded_file is not None:
                     a_val = str(ws.cell(row=r, column=1).value or "").strip()
                     row_label = str(ws.cell(row=r, column=cat_col).value or "").strip()
                     
-                    # 【核心拦截】：如果A列出现了内容（比如"当月总发满瓶数"），立刻停止，不越界填写！
+                    # 如果A列出现了内容（比如"当月总发满瓶数"），立刻停止，不越界填写！
                     if a_val != "":
                         break
                         
@@ -109,7 +109,7 @@ if uploaded_file is not None:
                             ws.cell(row=r, column=qty_col).value = v
                             break
 
-        # 只更新“收”区域
+        # 只更新“收”区域，忽略“发”区域
         update_stats(ws_stat, "收满瓶", counts_full)
         update_stats(ws_stat, "收空瓶", counts_empty)
         
